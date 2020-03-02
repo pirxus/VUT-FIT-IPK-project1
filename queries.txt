@@ -1,0 +1,4 @@
+www.fit.vutbr.cz:A
+apple.com:A
+147.229.14.131:PTR
+seznam.cz:A

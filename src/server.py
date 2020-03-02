@@ -93,7 +93,12 @@ if len(sys.argv) > 1: # get port number from program argument
 # create server socket and set flags to avoid errors when relaunching the server
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-s.bind(('localhost', port))
+
+try:
+    s.bind(('localhost', port))
+except PermissionError:
+    sys.exit(42)
+
 s.listen()
 
 while True:
@@ -113,6 +118,16 @@ while True:
             response = handle_get(data)
 
         elif req_method == "POST":
+
+            # In case the length of data in the request is bigger than the default
+            # packet size, recieve the rest
+            data_len = data.split('\r\n\r\n')[0].split('\r\n')[4].split(' ')[1]
+            if data_len.isnumeric():
+                data_len = int(data_len)
+                if data_len > PACKET_SIZE:
+                    data_chunk = client_sock.recv(data_len)
+                    data += data_chunk.decode()
+
             response = handle_post(data)
 
         else: # unknown method...
@@ -120,3 +135,6 @@ while True:
 
         client_sock.sendall(response.encode())
         client_sock.close()
+
+s.shutdown(socket.SHUT_RDWR)
+s.close()

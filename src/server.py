@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import socket
+import ipaddress
 import signal
 import sys
 import re
@@ -16,9 +17,19 @@ def translate_name(name, req_type):
     # let's construct the response...
     try:
         if req_type == "A":
-            answer = socket.gethostbyname(name)
+            try: # cannot ask for A given an address
+                socket.inet_aton(name)
+                return None
+            except OSError:
+                answer = socket.gethostbyname(name)
+
         elif req_type == "PTR":
+            try: # cannot ask for PTR given a domain name
+                socket.inet_aton(name)
+            except OSError:
+                return None
             answer, __, __  = socket.gethostbyaddr(name)
+
         else:
             return None
     except socket.gaierror:
@@ -31,7 +42,7 @@ def translate_name(name, req_type):
 
 def handle_get(data):
     response = "HTTP/1.1 200 OK\r\n\r\n"
-    request = data.split('\r\n')[0]
+    request = data.split('\n')[0]
 
     # check the request format...
     matcher_get = re.compile(r'GET /resolve\?name=\S+&type=(A|(PTR)) HTTP/1\.1')
@@ -56,25 +67,32 @@ def handle_post(data):
     response_header = "HTTP/1.1 200 OK\r\n\r\n"
     response = ""
 
-    request = data.split('\r\n')[0]
+    request = data.split('\n')[0]
     if request != "POST /dns-query HTTP/1.1":
         return "HTTP/1.1 404 Bad Request\r\n\r\n"
 
     # read the queries...
-    data = data.split('\r\n\r\n')[1].strip().split('\n')
+    data = data.split('\n\n')[1].split('\n')
 
+    empty = True
+    matcher_post = re.compile(r'^\S+:(A|(PTR))$') # format of the query
     for item in data:
-        if item == "": continue
+        if item == "": continue # avoid setting the empty flag to false for an empty line
+        empty = False
+
+        # check the query format...
+        if re.fullmatch(matcher_post, item) == None:
+            continue
+
         query = item.split(':')
         answer = translate_name(query[0], query[1])
         if answer is None:
             continue
-            #return "HTTP/1.1 404 Bad Request\r\n\r\n" - so what?
         response += item + '=' + answer + '\r\n'
 
     # There were either no queries at all or there was no query that was
     # of the  correct format 
-    if response == "":
+    if response == "" and empty == False:
         return "HTTP/1.1 404 Bad Request\r\n\r\n"
 
     return response_header + response
@@ -110,6 +128,7 @@ while True:
         if not data:
             break
 
+        data = data.replace('\r\n', '\n') # normalize the line ends...
         req_method = data.split(' ')[0]
         print(f"method: {req_method}")
         print(f"request body: {data}")
@@ -121,19 +140,25 @@ while True:
 
             # In case the length of data in the request is bigger than the default
             # packet size, recieve the rest
-            data_len = data.split('\r\n\r\n')[0].split('\r\n')[4].split(' ')[1]
+            data_len = data.split('\n\n')[0].split('\n')[4].split(' ')[1]
             if data_len.isnumeric():
                 data_len = int(data_len)
                 if data_len > PACKET_SIZE:
-                    data_chunk = client_sock.recv(data_len)
-                    data += data_chunk.decode()
+                    iterations = data_len // PACKET_SIZE
+                    while iterations > 0:
+                        data_chunk = client_sock.recv(PACKET_SIZE)
+                        data += data_chunk.decode()
+                        iterations -= 1
 
+            data = data.replace('\r\n', '\n')
             response = handle_post(data)
 
         else: # unknown method...
             response = "HTTP/1.1 405 Method Not Allowed\r\n\r\n"
 
         client_sock.sendall(response.encode())
+        try: client_sock.shutdown(socket.SHUT_RDWR)
+        except OSError: pass
         client_sock.close()
 
 s.shutdown(socket.SHUT_RDWR)

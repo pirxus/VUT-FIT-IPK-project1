@@ -20,19 +20,19 @@ def translate_name(name, req_type):
             try: # cannot ask for A given an address
                 socket.inet_aton(name)
                 return None, True # bad request
-            except OSError:
+            except:
                 answer = socket.gethostbyname(name)
 
         elif req_type == "PTR":
             try: # cannot ask for PTR given a domain name
                 socket.inet_aton(name)
-            except OSError:
+            except:
                 return None, True # Bad request
             answer, __, __  = socket.gethostbyaddr(name)
 
         else:
             return None, True # Bad request
-    except socket.gaierror:
+    except:
             return None, False # Not found
 
     # avoid asking for A given an address and for PTR given a PTR..
@@ -80,7 +80,11 @@ def handle_post(data):
         if data[-1] == '':
             data.pop()
 
-    bad_request = False
+    if data == []:
+        bad_request = True
+    else:
+        bad_request = False
+
     matcher_post = re.compile(r'^(((?:[0-9]{1,3}\.){3}[0-9]{1,3})|((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]))[ ]*:[ ]*(A|(PTR))[ ]*$') # format of the query
     for item in data:
         # check the query format...
@@ -91,8 +95,10 @@ def handle_post(data):
         query = item.split(':')
         name = query[0].strip()
         req_type = query[1].strip()
-        answer, __ = translate_name(name, req_type)
+        answer, bad = translate_name(name, req_type)
         if answer is None:
+            if bad == True:
+                bad_request = True
             continue
         response += name + ':' + req_type + '=' + answer + '\r\n'
 
@@ -128,7 +134,7 @@ s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
 try:
     s.bind(('localhost', port))
-except PermissionError:
+except:
     sys.stderr.write('Could not bind to the specified port.\n')
     sys.exit(1)
 
@@ -170,7 +176,7 @@ while True:
 
         client_sock.sendall(response.encode())
         try: client_sock.shutdown(socket.SHUT_RDWR)
-        except OSError: pass
+        except: pass
         client_sock.close()
 
 s.shutdown(socket.SHUT_RDWR)

@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+# Author: Simon Sedlacek - xsedla1h
 
 import socket
 import ipaddress
@@ -108,16 +109,18 @@ def handle_post(data):
 # _____________ MAIN _____________
 if len(sys.argv) != 2:
     sys.stderr.write('Please specify a port number.\n')
-    sys.exit(500)
+    sys.exit(1)
 
 # get port number from program argument
 arg = sys.argv[1]
 if not arg.isnumeric():
-    sys.exit(500)
+    sys.stderr.write('Specified port was not a valid port number.\n')
+    sys.exit(1)
 
 port = int(arg)
 if not 0 <= port <= 65535: # check port value
-    sys.exit(500)
+    sys.stderr.write('Specified port was not a valid port number.\n')
+    sys.exit(1)
 
 # create server socket and set flags to avoid errors when relaunching the server
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -126,7 +129,8 @@ s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 try:
     s.bind(('localhost', port))
 except PermissionError:
-    sys.exit(500)
+    sys.stderr.write('Could not bind to the specified port.\n')
+    sys.exit(1)
 
 s.listen()
 

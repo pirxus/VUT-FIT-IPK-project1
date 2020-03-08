@@ -73,8 +73,11 @@ def handle_post(data):
     if request != "POST /dns-query HTTP/1.1":
         return "HTTP/1.1 400 Bad Request\r\n\r\n"
 
-    # read the queries...
-    data = data.split('\n\n')[1].split('\n')
+    # slice off the header and split by \n
+    data = data[data.find('\n\n') + 2:].split('\n')
+    if data != []:
+        if data[-1] == '':
+            data.pop()
 
     bad_request = False
     matcher_post = re.compile(r'^(((?:[0-9]{1,3}\.){3}[0-9]{1,3})|((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]))[ ]*:[ ]*(A|(PTR))[ ]*$') # format of the query

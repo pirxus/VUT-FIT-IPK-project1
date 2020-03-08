@@ -44,7 +44,7 @@ def handle_get(data):
     request = data.split('\n')[0]
 
     # check the request format...
-    matcher_get = re.compile(r'GET /resolve\?name=(((?:[0-9]{1,3}\.){3}[0-9]{1,3})|([a-zA-Z0-9\.-]+))&type=(A|(PTR)) HTTP/1\.1')
+    matcher_get = re.compile(r'GET /resolve\?name=(((?:[0-9]{1,3}\.){3}[0-9]{1,3})|((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]))&type=(A|(PTR)) HTTP/1\.1')
     if re.fullmatch(matcher_get, request) == None:
         return "HTTP/1.1 400 Bad Request\r\n\r\n"
 
@@ -76,27 +76,25 @@ def handle_post(data):
     # read the queries...
     data = data.split('\n\n')[1].split('\n')
 
-    empty = True
     bad_request = False
-    matcher_post = re.compile(r'^(((?:[0-9]{1,3}\.){3}[0-9]{1,3})|([a-zA-Z0-9\.-]+)):(A|(PTR))$') # format of the query
+    matcher_post = re.compile(r'^(((?:[0-9]{1,3}\.){3}[0-9]{1,3})|((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]))[ ]*:[ ]*(A|(PTR))[ ]*$') # format of the query
     for item in data:
-        if item == "": continue # avoid setting the empty flag to false for an empty line
-        empty = False
-
         # check the query format...
         if re.fullmatch(matcher_post, item) == None:
             bad_request = True
             continue
 
         query = item.split(':')
-        answer, __ = translate_name(query[0], query[1])
+        name = query[0].strip()
+        req_type = query[1].strip()
+        answer, __ = translate_name(name, req_type)
         if answer is None:
             continue
-        response += item + '=' + answer + '\r\n'
+        response += name + ':' + req_type + '=' + answer + '\r\n'
 
     # There were either no queries at all or there was no query that was
     # of the  correct format 
-    if response == "" and empty == False:
+    if response == "":
         if bad_request == True:
             return "HTTP/1.1 400 Bad Request\r\n\r\n"
         else:
@@ -131,17 +129,14 @@ s.listen()
 
 while True:
     client_sock, address = s.accept()
-    #print(f"connection from {address} has been estabilished")
 
     with client_sock:
         data = client_sock.recv(PACKET_SIZE).decode()
         if not data:
             break
 
-        data = data.replace('\r\n', '\n') # normalize the line ends...
+        data = data.replace('\r\n', '\n') # unify newlines...
         req_method = data.split(' ')[0]
-        #print(f"method: {req_method}")
-        #print(f"request body: {data}")
         
         if req_method == "GET":
             response = handle_get(data)
